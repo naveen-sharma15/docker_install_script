@@ -1,77 +1,207 @@
 #!/bin/bash
 
-echo '=== Check Docker ==='
+# ─────────────────────────────────────
+# VARIABLES
+# ─────────────────────────────────────
+RPM_PATH="/appbin/Softwares/docker"
+CERTS_PATH="/home/ec2-user/platform/SoftwareFiles/docker"
+DOCKER_ROOT="/appdata/install/jenkins/Docker_Root"
+ETC_DOCKER="/etc/docker"
+LOG_FILE="/var/log/docker_install.log"
+
+# ─────────────────────────────────────
+# LOGGING
+# ─────────────────────────────────────
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a $LOG_FILE
+}
+
+# ─────────────────────────────────────
+# STEP 1 - CHECK DOCKER ALREADY EXISTS
+# ─────────────────────────────────────
+log "=== Check Docker ==="
 if docker --version > /dev/null 2>&1; then
-    echo Docker already installed
-    exit 0
-fi
-
-echo '=== Install Dependencies ==='
-sudo yum install -y container-selinux || echo WARNING: container-selinux not available
-sudo yum install -y libcgroup || echo WARNING: libcgroup not available
-sudo yum install -y fuse-overlayfs || echo WARNING: fuse-overlayfs not available
-sudo yum install -y slirp4netns || echo WARNING: slirp4netns not available
-sudo yum install -y iptables || echo WARNING: iptables not available
-
-echo '=== Check RPM Folder ==='
-if [ ! -d /appbin/Softwares/docker ]; then
-    echo ERROR: RPM folder not found
-    exit 1
-fi
-
-echo '=== Install Docker RPMs ==='
-cd /appbin/Softwares/docker
-sudo rpm -ivh *.rpm
-if [ 0 -ne 0 ]; then
-    echo ERROR: RPM install failed
-    exit 1
-fi
-
-echo '=== Verify Docker Installed ==='
-if docker --version > /dev/null 2>&1; then
-    echo Docker installed successfully
+  log "Docker already installed: $(docker --version)"
+  log "Nothing to do. Exiting."
+  exit 0
 else
-    echo ERROR: Docker not found after install
-    exit 1
+  log "Docker not found. Proceeding..."
 fi
 
-echo '=== Create Jenkins Folder ==='
-if [ ! -d /appdata/install/jenkins/Docker_Root ]; then
-    sudo mkdir -p /appdata/install/jenkins/Docker_Root
-    sudo chmod -R 750 /appdata/install/jenkins/Docker_Root
-    echo Docker Root created
+# ─────────────────────────────────────
+# STEP 2 - CHECK ROOT
+# ─────────────────────────────────────
+log "=== Check Root Access ==="
+if [ "$EUID" -ne 0 ]; then
+  log "ERROR: Please run as root"
+  exit 1
+else
+  log "Root access OK"
 fi
 
-echo '=== Create /etc/docker folder ==='
-if [ ! -d /etc/docker ]; then
-    sudo mkdir -p /etc/docker
-    echo /etc/docker created
+# ─────────────────────────────────────
+# STEP 3 - INSTALL DEPENDENCIES
+# ─────────────────────────────────────
+log "=== Install Dependencies ==="
+
+if rpm -q container-selinux > /dev/null 2>&1; then
+  log "container-selinux already installed"
+else
+  yum install -y container-selinux || log "WARNING: container-selinux not available"
 fi
 
-echo '=== Check Certs ==='
-if [ ! -d /home/ec2-user/platform/SoftwareFiles/docker ]; then
-    echo ERROR: Certs not found
-    exit 1
+if rpm -q libcgroup > /dev/null 2>&1; then
+  log "libcgroup already installed"
+else
+  yum install -y libcgroup || log "WARNING: libcgroup not available"
 fi
 
-echo '=== Copy Certs ==='
-sudo cp -r     /home/ec2-user/platform/SoftwareFiles/docker/daemon.json     /home/ec2-user/platform/SoftwareFiles/docker/key.json     /home/ec2-user/platform/SoftwareFiles/docker/certs.d     /etc/docker/
+if rpm -q fuse-overlayfs > /dev/null 2>&1; then
+  log "fuse-overlayfs already installed"
+else
+  yum install -y fuse-overlayfs || log "WARNING: fuse-overlayfs not available"
+fi
 
-echo '=== Change Ownership ==='
-sudo chown -R root:root /etc/docker/
+if rpm -q slirp4netns > /dev/null 2>&1; then
+  log "slirp4netns already installed"
+else
+  yum install -y slirp4netns || log "WARNING: slirp4netns not available"
+fi
 
-echo '=== Start Docker ==='
-sudo systemctl start docker
-sudo systemctl enable docker
+if rpm -q iptables > /dev/null 2>&1; then
+  log "iptables already installed"
+else
+  yum install -y iptables || log "WARNING: iptables not available"
+fi
 
-echo '=== Verify Docker Running ==='
+# ─────────────────────────────────────
+# STEP 4 - CHECK RPM FOLDER
+# ─────────────────────────────────────
+log "=== Check RPM Folder ==="
+if [ -d "$RPM_PATH" ]; then
+  log "RPM folder found: $RPM_PATH"
+  ls $RPM_PATH
+else
+  log "ERROR: RPM folder not found at $RPM_PATH"
+  exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 5 - INSTALL DOCKER RPMs
+# ─────────────────────────────────────
+log "=== Install Docker RPMs ==="
+cd $RPM_PATH
+rpm -ivh *.rpm
+if [ $? -eq 0 ]; then
+  log "Docker RPMs installed successfully"
+else
+  log "ERROR: Docker RPM installation failed"
+  exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 6 - VERIFY DOCKER INSTALLED
+# ─────────────────────────────────────
+log "=== Verify Docker Installed ==="
+if docker --version > /dev/null 2>&1; then
+  log "Docker installed: $(docker --version)"
+else
+  log "ERROR: Docker not found after install"
+  exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 7 - CREATE JENKINS DOCKER FOLDER
+# ─────────────────────────────────────
+log "=== Create Jenkins Docker Folder ==="
+if [ -d "$DOCKER_ROOT" ]; then
+  log "Docker Root already exists, skipping"
+else
+  mkdir -p $DOCKER_ROOT
+  chmod -R 750 $DOCKER_ROOT
+  log "Docker Root created with 750 permissions"
+fi
+
+# ─────────────────────────────────────
+# STEP 8 - CREATE /etc/docker FOLDER
+# ─────────────────────────────────────
+log "=== Create /etc/docker Folder ==="
+if [ -d "$ETC_DOCKER" ]; then
+  log "/etc/docker already exists, skipping"
+else
+  mkdir -p $ETC_DOCKER
+  log "/etc/docker created"
+fi
+
+# ─────────────────────────────────────
+# STEP 9 - CHECK CERTS
+# ─────────────────────────────────────
+log "=== Check Certs ==="
+if [ -d "$CERTS_PATH" ]; then
+  log "Certs found at: $CERTS_PATH"
+  ls $CERTS_PATH
+else
+  log "ERROR: Certs not found at $CERTS_PATH"
+  exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 10 - COPY CERTS
+# ─────────────────────────────────────
+log "=== Copy Certs ==="
+cp -r $CERTS_PATH/daemon.json \
+      $CERTS_PATH/key.json \
+      $CERTS_PATH/certs.d \
+      $ETC_DOCKER/
+if [ $? -eq 0 ]; then
+  log "Certs copied successfully"
+else
+  log "ERROR: Certs copy failed"
+  exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 11 - CHANGE OWNERSHIP
+# ─────────────────────────────────────
+log "=== Change Ownership ==="
+chown -R root:root $ETC_DOCKER/
+if [ $? -eq 0 ]; then
+  log "Ownership changed to root:root"
+else
+  log "ERROR: chown failed"
+  exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 12 - START DOCKER
+# ─────────────────────────────────────
+log "=== Start Docker ==="
 if systemctl is-active docker > /dev/null 2>&1; then
-    echo SUCCESS: Docker is running
+  log "Docker already running"
 else
-    echo ERROR: Docker not running
+  systemctl start docker
+  systemctl enable docker
+  if [ $? -eq 0 ]; then
+    log "Docker started and enabled"
+  else
+    log "ERROR: Docker failed to start"
     exit 1
+  fi
 fi
 
-echo '=== Stop Docker Socket ==='
-sudo systemctl stop docker.socket
-echo Docker socket stopped
+# ─────────────────────────────────────
+# STEP 13 - VERIFY DOCKER RUNNING
+# ─────────────────────────────────────
+log "=== Verify Docker Running ==="
+if systemctl is-active docker > /dev/null 2>&1; then
+  log "SUCCESS: Docker is running"
+  docker --version
+  docker ps
+else
+  log "ERROR: Docker is not running"
+  exit 1
+fi
+
+log "================================"
+log "Docker Installation Complete!"
+log "================================"
