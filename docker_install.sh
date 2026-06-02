@@ -173,33 +173,71 @@ else
 fi
 
 # ─────────────────────────────────────
-# STEP 12 - START DOCKER
+# ROOT WORK DONE
+# NOW SWITCH TO JKSLAVE
 # ─────────────────────────────────────
-log "=== Start Docker ==="
+log "=== Switching to jkslave ==="
+
+# check jkslave exists
+if id jkslave > /dev/null 2>&1; then
+  log "jkslave user found"
+else
+  log "ERROR: jkslave user not found"
+  log "Please create jkslave user first"
+  exit 1
+fi
+
+# check jkslave in docker group
+if groups jkslave | grep docker > /dev/null 2>&1; then
+  log "jkslave already in docker group"
+else
+  usermod -aG docker jkslave
+  log "jkslave added to docker group"
+fi
+
+log "Switching to jkslave for docker operations"
+
+# ─────────────────────────────────────
+# STEP 12 - START DOCKER AS JKSLAVE
+# ─────────────────────────────────────
+log "=== Start Docker as jkslave ==="
 if systemctl is-active docker > /dev/null 2>&1; then
   log "Docker already running"
 else
-  systemctl start docker
-  systemctl enable docker
+  su - jkslave -c "systemctl start docker"
   if [ $? -eq 0 ]; then
-    log "Docker started and enabled"
+    log "Docker started by jkslave"
   else
     log "ERROR: Docker failed to start"
     exit 1
   fi
 fi
 
+# enable on reboot
+su - jkslave -c "systemctl enable docker"
+log "Docker enabled on reboot"
+
 # ─────────────────────────────────────
 # STEP 13 - VERIFY DOCKER RUNNING
 # ─────────────────────────────────────
 log "=== Verify Docker Running ==="
-if systemctl is-active docker > /dev/null 2>&1; then
+su - jkslave -c "systemctl status docker"
+if [ $? -eq 0 ]; then
   log "SUCCESS: Docker is running"
-  docker --version
-  docker ps
 else
   log "ERROR: Docker is not running"
   exit 1
+fi
+
+# ─────────────────────────────────────
+# STEP 14 - STOP DOCKER SOCKET AS JKSLAVE
+# ─────────────────────────────────────
+log "=== Stop Docker Socket as jkslee ==="
+su - jkslave -c "systemctl stop docker.socket"
+if [ $? -eq 0 ]; then
+  log "Docker socket stopped by jkslave"
+else
+  log "WARNING: Could not stop docker socket"
 fi
 
 log "================================"
