@@ -173,17 +173,15 @@ else
 fi
 
 # ─────────────────────────────────────
-# ROOT WORK DONE
-# NOW SWITCH TO JKSLAVE
+# CHECK JKSLAVE
 # ─────────────────────────────────────
-log "=== Switching to jkslave ==="
+log "=== Check jkslave ==="
 
 # check jkslave exists
 if id jkslave > /dev/null 2>&1; then
   log "jkslave user found"
 else
   log "ERROR: jkslave user not found"
-  log "Please create jkslave user first"
   exit 1
 fi
 
@@ -195,8 +193,6 @@ else
   log "jkslave added to docker group"
 fi
 
-log "Switching to jkslave for docker operations"
-
 # ─────────────────────────────────────
 # STEP 12 - START DOCKER AS JKSLAVE
 # ─────────────────────────────────────
@@ -204,7 +200,7 @@ log "=== Start Docker as jkslave ==="
 if systemctl is-active docker > /dev/null 2>&1; then
   log "Docker already running"
 else
-  su - jkslave -c "systemctl start docker"
+  su - jkslave -c "sudo systemctl start docker"
   if [ $? -eq 0 ]; then
     log "Docker started by jkslave"
   else
@@ -213,15 +209,14 @@ else
   fi
 fi
 
-# enable on reboot
-su - jkslave -c "systemctl enable docker"
+su - jkslave -c "sudo systemctl enable docker"
 log "Docker enabled on reboot"
 
 # ─────────────────────────────────────
 # STEP 13 - VERIFY DOCKER RUNNING
 # ─────────────────────────────────────
 log "=== Verify Docker Running ==="
-su - jkslave -c "systemctl status docker"
+su - jkslave -c "sudo systemctl status docker"
 if [ $? -eq 0 ]; then
   log "SUCCESS: Docker is running"
 else
@@ -232,8 +227,8 @@ fi
 # ─────────────────────────────────────
 # STEP 14 - STOP DOCKER SOCKET AS JKSLAVE
 # ─────────────────────────────────────
-log "=== Stop Docker Socket as jkslee ==="
-su - jkslave -c "systemctl stop docker.socket"
+log "=== Stop Docker Socket as jkslave ==="
+su - jkslave -c "sudo systemctl stop docker.socket"
 if [ $? -eq 0 ]; then
   log "Docker socket stopped by jkslave"
 else
