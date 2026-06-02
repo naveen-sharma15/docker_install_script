@@ -176,8 +176,6 @@ fi
 # CHECK JKSLAVE
 # ─────────────────────────────────────
 log "=== Check jkslave ==="
-
-# check jkslave exists
 if id jkslave > /dev/null 2>&1; then
   log "jkslave user found"
 else
@@ -185,7 +183,6 @@ else
   exit 1
 fi
 
-# check jkslave in docker group
 if groups jkslave | grep docker > /dev/null 2>&1; then
   log "jkslave already in docker group"
 else
@@ -222,17 +219,6 @@ if [ $? -eq 0 ]; then
 else
   log "ERROR: Docker is not running"
   exit 1
-fi
-
-# ─────────────────────────────────────
-# STEP 14 - STOP DOCKER SOCKET AS JKSLAVE
-# ─────────────────────────────────────
-log "=== Stop Docker Socket as jkslave ==="
-su - jkslave -c "sudo systemctl stop docker.socket"
-if [ $? -eq 0 ]; then
-  log "Docker socket stopped by jkslave"
-else
-  log "WARNING: Could not stop docker socket"
 fi
 
 log "================================"
